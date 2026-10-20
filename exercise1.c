@@ -15,7 +15,7 @@ int main(int argc, char *argv[])
    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
    // Measure initial system time
-   double t0 = MPI_Wtime(); 
+   double t0 = MPI_Wtime();
 
    // Initialize Matrix A and B and vector c
    int rowsA = 128000;
@@ -24,29 +24,25 @@ int main(int argc, char *argv[])
 
    int rowsB = 500;
    int colsB = 1000;
-   int seedB = 20;   
+   int seedB = 20;
 
    int elemC = 1000;
    int seedC = 30;
-
-   // The number of rows and columns is broadcasted to all ranks
-   MPI_Bcast(&rowsA, 1, MPI_INT, 0, MPI_COMM_WORLD);
-   MPI_Bcast(&colsA, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
    // Compute the number of rows that must be distributed on each rank.
    int num_of_matrix_elements_per_rank = (int) rowsA / num_of_ranks;
    int num_of_residual_elements = (int) rowsA % num_of_ranks;
 
-   double *vector_in; //c
+   double *vector_in = NULL; //c
    double *vector_interm; //v = Bc
    double **matrixA_in; //A
-   double **matrixB_in; //B
+   double **matrixB_in = NULL; //B
    double *vector_out; //d = Av
 
    vector_interm = allocate_1d_double(&rowsB);
 
    // Initialize "local" and "initial" matrices. A, B and c are initialized by rank 0
-   if (mpi_rank == 0) 
+   if (mpi_rank == 0)
    {
       vector_in = allocate_1d_double(&elemC);
       matrixA_in = allocate_2d_packed_double(&rowsA, &colsA);
@@ -59,10 +55,10 @@ int main(int argc, char *argv[])
    }
 
    // Measure time before mathematical operations
-   double t1 = MPI_Wtime(); 
+   double t1 = MPI_Wtime();
 
    // Compute v = Bc on rank 0
-   if (mpi_rank == 0) 
+   if (mpi_rank == 0)
    {
       dgemv(&rowsB, &colsB, matrixB_in, vector_in, vector_interm);
    }
@@ -84,18 +80,18 @@ int main(int argc, char *argv[])
    {
       num_of_matrix_elements_per_rank += num_of_residual_elements;
    }
-   
+
    // Allocate "local" output vector
-   vector_out = allocate_1d_double(&num_of_matrix_elements_per_rank); 
+   vector_out = allocate_1d_double(&num_of_matrix_elements_per_rank);
 
    // Compute "local" dgemv operation
    dgemv(&num_of_matrix_elements_per_rank, &colsA, matrixA_in, vector_interm, vector_out);
 
    // Compute "local dot product"
-   double norm = ddot(&num_of_matrix_elements_per_rank, vector_out, vector_out); 
+   double norm = ddot(&num_of_matrix_elements_per_rank, vector_out, vector_out);
 
    // Measure time after mathematical operations
-   double t2 = MPI_Wtime(); 
+   double t2 = MPI_Wtime();
 
    // Reduce valuse of the "norm" they contain the local dot products
    if (mpi_rank == 0)
@@ -114,24 +110,13 @@ int main(int argc, char *argv[])
    }
 
    // Final time
-   double t3 = MPI_Wtime(); 
+   double t3 = MPI_Wtime();
 
    // Compute time differences and print them
    double dt0 = t1 - t0; // Time taken for initialization
    double dt1 = t2 - t1; // Time taken for calculation (Matrix Operations)
    double dt2 = t3 - t2; // Time taken for reduction (Reduce Operations)
    double dt3 = t3 - t0; // Total time
-
-   // Maximum time among ranks for each phase
-   double max_dt0 = 0.0;
-   double max_dt1 = 0.0;
-   double max_dt2 = 0.0;
-   double max_dt3 = 0.0;
-
-   MPI_Reduce(&dt0, &max_dt0, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&dt1, &max_dt1, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&dt2, &max_dt2, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-   MPI_Reduce(&dt3, &max_dt3, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
    if (mpi_rank == 0)
    {
@@ -153,12 +138,6 @@ int main(int argc, char *argv[])
       printf("Average calculation time per rank   : %f seconds\n", dt1/((double)num_of_ranks));
       printf("Average reduction time per rank     : %f seconds\n", dt2/((double)num_of_ranks));
       printf("Average total time per rank         : %f seconds\n", dt3/((double)num_of_ranks));
-
-      
-      printf("Max initialization time: %.6f seconds\n", max_dt0);
-      printf("Max matrix operations time: %.6f seconds\n", max_dt1);
-      printf("Max reduction time: %.6f seconds\n", max_dt2);
-      printf("Max total time: %.6f seconds\n", max_dt3);
    }
 
    MPI_Finalize();
